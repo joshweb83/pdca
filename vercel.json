@@ -1,17 +1,20 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd frontend && npm install && npm run build",
+  "buildCommand": "cd frontend && npx prisma generate && npm run build",
   "devCommand": "cd frontend && npm run dev",
-  "installCommand": "npm install",
-  "framework": null,
-  "outputDirectory": "frontend/dist",
+  "installCommand": "cd frontend && npm install",
+  "framework": "nextjs",
+  "outputDirectory": "frontend/.next",
   "regions": ["icn1"],
   "env": {
-    "VITE_API_URL": "@vite_api_url"
+    "DATABASE_URL": "@database_url",
+    "JWT_SECRET": "@jwt_secret",
+    "JWT_EXPIRES_IN": "7d"
   },
   "build": {
     "env": {
-      "VITE_API_URL": "@vite_api_url"
+      "DATABASE_URL": "@database_url",
+      "JWT_SECRET": "@jwt_secret"
     }
   }
 }
