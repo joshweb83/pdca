@@ -1,0 +1,677 @@
+// Prisma Schema for PDCA System
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================================
+// 사용자 및 권한 관리
+// ================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(USER)
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  programs      Program[]
+  kpiValues     KPIValue[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN         // 시스템 관리자
+  MANAGER       // 부서장/학과장
+  USER          // 일반 사용자
+  VIEWER        // 조회만 가능
+}
+
+// ================================
+// 조직 구조
+// ================================
+
+model Department {
+  id       String  @id @default(uuid())
+  code     String  @unique
+  name     String
+  parentId String?
+  parent   Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children Department[] @relation("DepartmentHierarchy")
+
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users    User[]
+  programs Program[]
+
+  @@map("departments")
+}
+
+// ================================
+// 프로그램 관리
+// ================================
+
+model Program {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  managerId String
+  manager   User   @relation(fields: [managerId], references: [id])
+
+  startDate DateTime
+  endDate   DateTime
+
+  totalBudget Decimal @default(0)
+  status      ProgramStatus @default(PLANNING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  kpis             ProgramKPI[]
+  indicators       ProgramIndicator[]
+  budgetItems      BudgetItem[]
+  activities       Activity[]
+  feedbackTasks    FeedbackTask[]
+
+  @@index([departmentId])
+  @@index([managerId])
+  @@index([status])
+  @@map("programs")
+}
+
+enum ProgramStatus {
+  PLANNING      // 계획 중
+  ONGOING       // 진행 중
+  COMPLETED     // 완료
+  SUSPENDED     // 중단
+  CANCELLED     // 취소
+}
+
+// ================================
+// KPI (성과 요소)
+// ================================
+
+model KPI {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+
+  unit         String           // 측정 단위 (명, 점, %, 건 등)
+  dataType     KPIDataType      @default(NUMBER)
+  measureCycle MeasurementCycle @default(MONTHLY)
+
+  dataSource String? // 데이터 소스 (manual, api, file 등)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  programKPIs            ProgramKPI[]
+  indicatorDependencies  IndicatorKPIDependency[]
+
+  @@map("kpis")
+}
+
+enum KPIDataType {
+  NUMBER
+  PERCENTAGE
+  CURRENCY
+  DATE
+  TEXT
+}
+
+enum MeasurementCycle {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+// 프로그램별 KPI 설정
+model ProgramKPI {
+  id        String @id @default(uuid())
+
+  programId String
+  program   Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  kpiId     String
+  kpi       KPI    @relation(fields: [kpiId], references: [id])
+
+  targetValue     Decimal?
+  responsiblePerson String?
+  inputDeadline   String? // 매월 5일 등
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  values KPIValue[]
+
+  @@unique([programId, kpiId])
+  @@index([programId])
+  @@index([kpiId])
+  @@map("program_kpis")
+}
+
+// KPI 값 (실제 입력 데이터)
+model KPIValue {
+  id String @id @default(uuid())
+
+  programKPIId String
+  programKPI   ProgramKPI @relation(fields: [programKPIId], references: [id], onDelete: Cascade)
+
+  period String // 2025-10, 2025-Q1 등
+  value  Decimal
+
+  inputById String
+  inputBy   User   @relation(fields: [inputById], references: [id])
+
+  inputDate DateTime @default(now())
+  notes     String?
+
+  metadata Json? // 추가 메타데이터
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([programKPIId, period])
+  @@index([programKPIId])
+  @@index([period])
+  @@map("kpi_values")
+}
+
+// ================================
+// 지표 (산출식)
+// ================================
+
+model Indicator {
+  id          String @id @default(uuid())
+  code        String @unique
+  name        String
+  description String?
+
+  category     String // 자율성과지표 등
+  indexNumber  Int?   // 1, 2, 3, 4
+
+  formula     String // 산출식 (문자열)
+  formulaJson Json   // 산출식 (파싱된 트리)
+
+  unit String // 결과 단위 (%, 점 등)
+
+  version Int @default(1)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  programIndicators ProgramIndicator[]
+  kpiDependencies   IndicatorKPIDependency[]
+  versions          IndicatorVersion[]
+
+  @@map("indicators")
+}
+
+// 지표 버전 관리
+model IndicatorVersion {
+  id String @id @default(uuid())
+
+  indicatorId String
+  indicator   Indicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+
+  version      Int
+  formula      String
+  formulaJson  Json
+  changeReason String?
+
+  changedBy String
+  changedAt DateTime @default(now())
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  @@unique([indicatorId, version])
+  @@index([indicatorId])
+  @@map("indicator_versions")
+}
+
+// 지표-KPI 의존성
+model IndicatorKPIDependency {
+  id String @id @default(uuid())
+
+  indicatorId String
+  indicator   Indicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+
+  kpiId String
+  kpi   KPI    @relation(fields: [kpiId], references: [id])
+
+  dependencyOrder Int? // 계산 순서
+
+  createdAt DateTime @default(now())
+
+  @@unique([indicatorId, kpiId])
+  @@index([indicatorId])
+  @@index([kpiId])
+  @@map("indicator_kpi_dependencies")
+}
+
+// 프로그램별 지표 설정
+model ProgramIndicator {
+  id String @id @default(uuid())
+
+  programId String
+  program   Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  indicatorId String
+  indicator   Indicator @relation(fields: [indicatorId], references: [id])
+
+  targetValue Decimal?
+  weight      Decimal? // 가중치 (%)
+
+  thresholdExcellent Decimal? // 우수 기준
+  thresholdGood      Decimal? // 양호 기준
+  thresholdFair      Decimal? // 보통 기준
+  thresholdPoor      Decimal? // 미흡 기준
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  values IndicatorValue[]
+
+  @@unique([programId, indicatorId])
+  @@index([programId])
+  @@index([indicatorId])
+  @@map("program_indicators")
+}
+
+// 지표 계산 결과
+model IndicatorValue {
+  id String @id @default(uuid())
+
+  programIndicatorId String
+  programIndicator   ProgramIndicator @relation(fields: [programIndicatorId], references: [id], onDelete: Cascade)
+
+  period String // 2025-10, 2025-Q1 등
+
+  calculatedValue  Decimal
+  targetValue      Decimal?
+  achievementRate  Decimal? // 달성률
+  grade            String?  // S, A, B, C, D
+
+  calculatedAt     DateTime @default(now())
+  calculationFormula String // 계산 시 사용된 수식
+  usedKPIValues    Json     // 사용된 KPI 값들
+
+  @@unique([programIndicatorId, period])
+  @@index([programIndicatorId])
+  @@index([period])
+  @@map("indicator_values")
+}
+
+// 지표 계산 로그
+model IndicatorCalculationLog {
+  id String @id @default(uuid())
+
+  programId   String?
+  indicatorId String?
+  period      String?
+
+  formula     String
+  inputKPIs   Json
+  outputValue Decimal?
+
+  executionTimeMs Int?
+  status          CalculationStatus
+  errorMessage    String?
+
+  calculatedAt DateTime @default(now())
+
+  @@index([programId])
+  @@index([indicatorId])
+  @@index([status])
+  @@map("indicator_calculation_logs")
+}
+
+enum CalculationStatus {
+  SUCCESS
+  ERROR
+  WARNING
+  TIMEOUT
+}
+
+// ================================
+// 예산 관리
+// ================================
+
+model BudgetItem {
+  id String @id @default(uuid())
+
+  programId String
+  program   Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  category     String  // 비목
+  plannedAmount Decimal
+
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  executions BudgetExecution[]
+
+  @@index([programId])
+  @@map("budget_items")
+}
+
+model BudgetExecution {
+  id String @id @default(uuid())
+
+  budgetItemId String
+  budgetItem   BudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+
+  executedAmount Decimal
+  executedDate   DateTime
+
+  description String?
+  receiptUrl  String? // 증빙 서류 URL
+
+  status    BudgetExecutionStatus @default(PENDING)
+  approvedBy String?
+  approvedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([budgetItemId])
+  @@index([status])
+  @@map("budget_executions")
+}
+
+enum BudgetExecutionStatus {
+  PENDING   // 승인 대기
+  APPROVED  // 승인됨
+  REJECTED  // 반려
+}
+
+// ================================
+// 활동 관리
+// ================================
+
+model Activity {
+  id String @id @default(uuid())
+
+  programId String
+  program   Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+
+  startDate DateTime
+  endDate   DateTime
+
+  status ActivityStatus @default(PLANNED)
+
+  progress Int @default(0) // 0-100%
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([programId])
+  @@index([status])
+  @@map("activities")
+}
+
+enum ActivityStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+  CANCELLED
+}
+
+// ================================
+// 환류 (PDCA)
+// ================================
+
+model FeedbackTask {
+  id String @id @default(uuid())
+
+  programId String
+  program   Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  period String // 2025-Q1 등
+
+  issue           String // 문제점
+  rootCause       String? // 근본 원인
+  improvementPlan String // 개선 계획
+
+  responsible String
+  dueDate     DateTime
+
+  status FeedbackStatus @default(PENDING)
+
+  expectedEffect String? // 기대 효과
+  actualEffect   String? // 실제 효과
+
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([programId])
+  @@index([status])
+  @@map("feedback_tasks")
+}
+
+enum FeedbackStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ================================
+// 외부 시스템 연동
+// ================================
+
+model ExternalSystem {
+  id   String @id @default(uuid())
+  code String @unique
+  name String
+
+  type SystemType // REST_API, SOAP, DATABASE, FILE, WEBHOOK
+
+  baseUrl         String?
+  apiKeyEncrypted String? // 암호화된 API Key
+
+  config Json // 연결 설정
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  integrationLogs IntegrationLog[]
+  syncHistory     SyncHistory[]
+  fieldMappings   FieldMapping[]
+
+  @@map("external_systems")
+}
+
+enum SystemType {
+  REST_API
+  SOAP
+  DATABASE
+  FILE
+  WEBHOOK
+}
+
+// 연동 로그
+model IntegrationLog {
+  id String @id @default(uuid())
+
+  systemId String
+  system   ExternalSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
+
+  operation String // fetch_students, send_report 등
+  direction String // push, pull
+
+  status IntegrationStatus
+
+  requestPayload  Json?
+  responsePayload Json?
+  errorMessage    String?
+
+  executionTimeMs Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([systemId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("integration_logs")
+}
+
+enum IntegrationStatus {
+  SUCCESS
+  FAILURE
+  TIMEOUT
+  PARTIAL
+}
+
+// 동기화 이력
+model SyncHistory {
+  id String @id @default(uuid())
+
+  systemId String
+  system   ExternalSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
+
+  entityType String // students, employees, budgets
+  syncType   String // full, incremental
+
+  recordsProcessed Int @default(0)
+  recordsSuccess   Int @default(0)
+  recordsFailed    Int @default(0)
+
+  startedAt   DateTime
+  completedAt DateTime?
+
+  status       SyncStatus
+  errorDetails Json?
+
+  @@index([systemId])
+  @@index([status])
+  @@map("sync_history")
+}
+
+enum SyncStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// 필드 매핑 (외부 시스템 ↔ 내부 시스템)
+model FieldMapping {
+  id String @id @default(uuid())
+
+  systemId String
+  system   ExternalSystem @relation(fields: [systemId], references: [id], onDelete: Cascade)
+
+  entityType      String // students, employees 등
+  externalField   String
+  internalField   String
+  transformationRule Json? // 변환 규칙
+
+  isRequired Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([systemId])
+  @@map("field_mappings")
+}
+
+// ================================
+// 알림
+// ================================
+
+model Notification {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title   String
+  message String
+  type    NotificationType
+
+  relatedEntityType String? // program, kpi, indicator 등
+  relatedEntityId   String?
+
+  isRead Boolean @default(false)
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ERROR
+  SUCCESS
+  REMINDER
+}
+
+// ================================
+// 감사 로그
+// ================================
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  action     String // CREATE, UPDATE, DELETE, LOGIN 등
+  entityType String // Program, KPI 등
+  entityId   String?
+
+  before Json? // 변경 전 데이터
+  after  Json? // 변경 후 데이터
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

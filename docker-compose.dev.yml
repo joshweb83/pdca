@@ -1,0 +1,35 @@
+version: '3.8'
+
+# Development environment with hot reload
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pdca-postgres-dev
+    environment:
+      POSTGRES_DB: pdca_dev
+      POSTGRES_USER: pdca_user
+      POSTGRES_PASSWORD: pdca_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    networks:
+      - pdca-dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: pdca-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - pdca-dev-network
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+networks:
+  pdca-dev-network:
+    driver: bridge
