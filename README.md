@@ -49,6 +49,40 @@
 
 ---
 
+## 🚀 배포
+
+### 빠른 배포 (5분)
+
+**Vercel로 Frontend 배포:**
+1. https://vercel.com 접속
+2. GitHub로 로그인
+3. 저장소 선택: `joshweb83/pdca`
+4. Deploy 클릭!
+
+자세한 가이드:
+- **빠른 시작**: [QUICKSTART_DEPLOYMENT.md](./QUICKSTART_DEPLOYMENT.md) ⚡
+- **전체 가이드**: [DEPLOYMENT.md](./DEPLOYMENT.md) 📚
+
+### 배포 구조
+
+```
+Frontend (Vercel)
+  ↓ API 호출
+Backend (Railway/Render/자체 서버)
+  ↓
+Database (PostgreSQL) + Redis
+```
+
+### 자동 배포
+
+`main` 브랜치에 푸시하면 자동으로 Vercel에 배포됩니다:
+```bash
+git push origin main
+# GitHub Actions → Vercel 자동 배포! 🎉
+```
+
+---
+
 ## 🏗️ 기술 스택
 
 ### Frontend

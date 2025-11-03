@@ -1,0 +1,50 @@
+# Backend (백엔드는 Vercel에 배포하지 않음)
+backend/
+shared/
+
+# Node modules
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+shared/node_modules/
+
+# Build outputs
+backend/dist/
+shared/dist/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+
+# Logs
+logs/
+*.log
+
+# Database
+backend/prisma/migrations/
+backend/uploads/
+
+# Documentation (선택사항)
+# docs/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+docker-compose.yml
+docker-compose.dev.yml
+Dockerfile
+backend/Dockerfile
+frontend/Dockerfile
+.dockerignore
+
+# CI/CD
+.github/
+
+# IDE
+.vscode/
+.idea/
